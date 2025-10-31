@@ -16,6 +16,8 @@
 
 import os
 import typing
+import pathlib
+import subprocess
 import serial
 
 import rbot.exceptions
@@ -114,5 +116,20 @@ class SerialChannel(channel.Channel):
         self._baudrate = baudrate
 
     def open(self, *args, **kwargs) -> None:
-        print("Serial open")
         super().__init__(SerialChannelIO(self.port, self.baudrate))
+
+    def xmodem_upload(self, file: typing.Union[str, pathlib.Path], callback=None):
+        cmd = f"sx {file} < {self._port} > {self._port}"
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
+        total_size = None
+        send_size = None
+        if callable(callback):
+            while True:
+                out = proc.stdout.readline()
+                err = proc.stderr.readline()
+                callable(out, err)
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.1)
+
+        return proc.wait()       
