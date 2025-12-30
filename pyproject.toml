@@ -1,0 +1,20 @@
+[build-system]
+requires = [
+    "setuptools>=45",
+    "setuptools_scm>=6.2",
+    "wheel",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+write_to = "rbot/_version.py"
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+python_version = "3.9"
+mypy_path = "stubs/:./"
+warn_incomplete_stub = true
+warn_redundant_casts = true
+warn_unused_configs = false
