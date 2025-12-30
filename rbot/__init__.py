@@ -1,0 +1,150 @@
+# rbot, Automation Tool
+# Copyright (C) 2025  Roman Guskov
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+import contextlib
+import time
+import typing
+from rbot import log
+
+from . import role
+
+from .decorators import (
+    testcase as _testcase_decorator,
+    named_testcase,
+)
+from .context import Context
+
+__all__ = (
+    "log",
+    "testcase",
+    "named_testcase",
+    "ctx",
+    "Context",
+    "role",
+)
+
+flags: typing.Set[str] = set()
+
+F_tc = typing.TypeVar("F_tc", bound=typing.Callable[..., typing.Any])
+
+
+@typing.overload
+def testcase(arg: str) -> typing.ContextManager[None]:
+    pass
+
+
+@typing.overload
+def testcase(arg: F_tc) -> F_tc:
+    pass
+
+
+def testcase(arg: typing.Union[str, F_tc]) -> typing.Union[typing.ContextManager, F_tc]:
+    """
+    Mark a testcase.
+
+    This function can be used in two ways; either as a decorator for a function
+    or as a context-manager.  The first form is probably what is most commonly
+    used because testcases defined using this decorator will be callable from
+    the commandline.
+
+    **Decorator**:
+
+    .. code-block:: python
+
+        @rbot.testcase
+        def foobar_testcase(x: str) -> int:
+            return int(x, 16)
+
+    **Context-Manager**:
+
+    .. code-block:: python
+
+        with rbot.testcase("test_foo_bar"):
+            ...
+    """
+    if isinstance(arg, str):
+        return _testcase_block(arg)
+    else:
+        return _testcase_decorator(arg)
+
+
+@contextlib.contextmanager
+def _testcase_block(name: str) -> typing.Iterator[None]:
+    """Testcase context-manager."""
+    log.testcase_begin(name)
+    start = time.monotonic()
+    try:
+        yield None
+    except SkipException as e:
+        log.testcase_end(name, time.monotonic() - start, skipped=str(e))
+        return None
+    except:  # noqa: E722
+        log.testcase_end(name, time.monotonic() - start, False)
+        raise
+    else:
+        log.testcase_end(name, time.monotonic() - start, True)
+
+
+class SkipException(Exception):
+    """
+    Exception to be used when a testcase is skipped.
+
+    Raising a :py:class:`SkipException` will be caught in the
+    :py:func:`rbot.testcase` decorator and the testcase will return ``None``.
+    This might violate the type-annotations so it should only be used if
+    calling code can deal with a testcase returning ``None``.
+    """
+
+    pass
+
+
+def skip(reason: str) -> typing.NoReturn:
+    """
+    Skip this testcase.
+
+    A skipped testcase will return ``None`` instead of whatever type it would
+    return normally.  This might not make sense for certain testcases and might
+    violate the type-annotation.  *Only use it, if it really makes sense!*
+
+    **Example**:
+
+    .. code-block:: python
+
+        @rbot.testcase
+        @rbot.with_lab
+        def test_something(lh) -> None:
+            p = lh.fsroot / "dev" / "somedevice"
+
+            if not p.is_char_device():
+                rbot.skip("somedevice not present on this host")
+
+            ...
+    """
+    raise SkipException(reason)
+
+
+def Re(pat: typing.Union[str, bytes], flags: int = 0) -> typing.Pattern[bytes]:
+    """
+    A bounded regex pattern for use with rbot.
+
+    When using various channel-methods you sometimes need a regex pattern.
+    ``rbot.Re`` is a convenience tool to create such patterns.
+    """
+    pat_bytes = pat if isinstance(pat, bytes) else pat.encode("utf-8")
+    return __import__("re").compile(pat_bytes, flags)  # type: ignore
+
+
+ctx = Context(add_defaults=True)
